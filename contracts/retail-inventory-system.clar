@@ -1,76 +1,89 @@
-;; Store Verification Contract
-;; This contract validates retail locations in the system
+;; Product Registration Contract
+;; This contract records merchandise details
 
 (define-data-var admin principal tx-sender)
 
-;; Store data structure
-(define-map stores
-  { store-id: uint }
+;; Product data structure
+(define-map products
+  { product-id: uint }
   {
     name: (string-utf8 100),
-    location: (string-utf8 100),
-    is-verified: bool,
-    owner: principal
+    description: (string-utf8 500),
+    sku: (string-utf8 50),
+    category: (string-utf8 50),
+    manufacturer: principal,
+    created-at: uint
   }
 )
 
-;; Store counter
-(define-data-var store-counter uint u0)
+;; Product counter
+(define-data-var product-counter uint u0)
 
 ;; Check if caller is admin
 (define-private (is-admin)
   (is-eq tx-sender (var-get admin))
 )
 
-;; Register a new store
-(define-public (register-store (name (string-utf8 100)) (location (string-utf8 100)))
+;; Register a new product
+(define-public (register-product
+  (name (string-utf8 100))
+  (description (string-utf8 500))
+  (sku (string-utf8 50))
+  (category (string-utf8 50))
+)
   (let
     (
-      (store-id (+ (var-get store-counter) u1))
+      (product-id (+ (var-get product-counter) u1))
     )
     (asserts! (> (len name) u0) (err u1)) ;; Name cannot be empty
-    (asserts! (> (len location) u0) (err u2)) ;; Location cannot be empty
+    (asserts! (> (len sku) u0) (err u2)) ;; SKU cannot be empty
 
-    ;; Update store counter and add store to map
-    (var-set store-counter store-id)
-    (map-set stores
-      { store-id: store-id }
+    ;; Update product counter and add product to map
+    (var-set product-counter product-id)
+    (map-set products
+      { product-id: product-id }
       {
         name: name,
-        location: location,
-        is-verified: false,
-        owner: tx-sender
+        description: description,
+        sku: sku,
+        category: category,
+        manufacturer: tx-sender,
+        created-at: block-height
       }
     )
-    (ok store-id)
+    (ok product-id)
   )
 )
 
-;; Verify a store (admin only)
-(define-public (verify-store (store-id uint))
+;; Update product details (only manufacturer can update)
+(define-public (update-product
+  (product-id uint)
+  (name (string-utf8 100))
+  (description (string-utf8 500))
+  (category (string-utf8 50))
+)
   (let
     (
-      (store (unwrap! (map-get? stores { store-id: store-id }) (err u3)))
+      (product (unwrap! (map-get? products { product-id: product-id }) (err u3)))
     )
-    (asserts! (is-admin) (err u4)) ;; Only admin can verify stores
+    (asserts! (is-eq (get manufacturer product) tx-sender) (err u4)) ;; Only manufacturer can update
 
-    ;; Update store verification status
-    (map-set stores
-      { store-id: store-id }
-      (merge store { is-verified: true })
+    ;; Update product details
+    (map-set products
+      { product-id: product-id }
+      (merge product {
+        name: name,
+        description: description,
+        category: category
+      })
     )
     (ok true)
   )
 )
 
-;; Get store details
-(define-read-only (get-store (store-id uint))
-  (map-get? stores { store-id: store-id })
-)
-
-;; Check if store is verified
-(define-read-only (is-store-verified (store-id uint))
-  (default-to false (get is-verified (map-get? stores { store-id: store-id })))
+;; Get product details
+(define-read-only (get-product (product-id uint))
+  (map-get? products { product-id: product-id })
 )
 
 ;; Transfer admin rights
